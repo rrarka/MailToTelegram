@@ -5,8 +5,6 @@ import javax.mail.*;
 import javax.mail.search.FlagTerm;
 import com.pengrad.telegrambot.TelegramBot;
 import com.pengrad.telegrambot.request.SendMessage;
-import com.pengrad.telegrambot.response.SendResponse;
-
 
 public class Main {
     public static void main(String[] args) throws IOException, MessagingException, InterruptedException {
@@ -16,7 +14,7 @@ public class Main {
         Properties properties = new Properties();
         properties.load(fileInputStream);
 
-        // Формирую перменые:
+        // Формирую константы:
         final String USER = properties.getProperty("mail.user");
         final String PASSWORD = properties.getProperty("mail.password");
         final String HOST = properties.getProperty("mail.host");
@@ -34,14 +32,14 @@ public class Main {
         // Передаю боту токен:
         TelegramBot bot = new TelegramBot(TOKEN);
 
-        // Создаю множество для заголовков:
+        // Создаю множество для заголовков писем:
         Set<String> subjects = new HashSet<String>();
 
         // Формирую флаг непрочитанных писем:
-        FlagTerm ft = new FlagTerm(new Flags(Flags.Flag.SEEN), false);
+        FlagTerm unread = new FlagTerm(new Flags(Flags.Flag.SEEN), false);
 
         // Создаю массив для непрочитанных писем:
-        Message[] messageMassive;
+        Message[] unreadMessages;
 
         // Создаю пустую директорию под письма:
         Folder inbox = null;
@@ -53,10 +51,10 @@ public class Main {
                 inbox.open(Folder.READ_WRITE); // or Folder.READ_ONLY
 
                 // Заполняю массив непрочитанными письмами:
-                messageMassive = inbox.search(ft);
+                unreadMessages = inbox.search(unread);
 
                 // Для массива непрочитанных писем:
-                for (Message message : messageMassive) {
+                for (Message message : unreadMessages) {
                     // Заполняю множество уникальными заголовками (отсекаю повторения из вложенных писем):
                     subjects.add(message.getSubject());
 
@@ -70,11 +68,8 @@ public class Main {
                     System.out.println(body.getContent()); */
                 }
 
-                // Для множества уникальных заголовков:
-                for (String subject : subjects) {
-                    // Отправляю в чат:
-                    SendResponse response = bot.execute(new SendMessage(CHAT_ID, subject.toString()));
-                }
+                // Отправляю в чат множество уникальных заголовков:
+                for (String subject : subjects) { bot.execute(new SendMessage(CHAT_ID, subject.toString())); }
 
                 /* Общее количество сообщений:
                 System.out.println("Всего писем: " + inbox.getMessageCount());
