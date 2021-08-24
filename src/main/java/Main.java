@@ -8,6 +8,8 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.*;
 
+import okhttp3.*;
+
 public class Main {
     public static void main(String[] args) throws IOException, MessagingException, InterruptedException {
 
@@ -18,6 +20,9 @@ public class Main {
 
         // Формирую константу:
         final String TOKEN = properties.getProperty("telegram.token");
+
+        final String ADDING_ADDRESS_API = properties.getProperty("mail.api.add");
+
         // Передаю боту токен:
         TelegramBot bot = new TelegramBot(TOKEN);
 
@@ -32,14 +37,20 @@ public class Main {
                 // Если в обновлении содержится сообщение:
                 if (update.message() != null){
                     String text = update.message().text();
+
                     // И это сообщение не пустое:
                     if (text != null)
                         // И если сообщение является командой:
                         if (text.startsWith("/createMail")) {  // TODO: добавь проверку для исключения некошерных символов + проверку на команду без username
                             String[] words = text.split(" ");
                             String username = words[1].toLowerCase(); // Обязательно перевожу в нижний регистр
-                            bot.execute(new SendMessage(update.message().chat().id(), "СОЗДАЮ ПОЧТУ С АДРЕСОМ: " + username + "@email2tg.ru"));
-                    }
+                            try {
+                                Postman.AddingNewAddress(username, ADDING_ADDRESS_API); // Создаю новый аккаунт
+                                bot.execute(new SendMessage(update.message().chat().id(), "СОЗДАЛ ПОЧТУ С АДРЕСОМ: " + username + "@email2tg.ru"));
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+                        }
                 }
             });
             // Возвращаю статус, что все обновления были прочитанны ботом:
@@ -48,9 +59,24 @@ public class Main {
     }
 }
 
-// TODO: Статический метод создания почты
+class Postman {
+    // Статический метод создания почты:
+    public static void AddingNewAddress(String username, String urlCreatingAddress) throws IOException {
+        OkHttpClient client = new OkHttpClient().newBuilder().build();
+        MediaType mediaType = MediaType.parse("application/json");
+        RequestBody body = RequestBody.create(mediaType, "{\n    \"username\" : " + username + "\n}\"");
+        Request request = new Request.Builder()
+                .url(urlCreatingAddress)
+                .method("POST", body)
+                .addHeader("Content-Type", "application/json")
+                .build();
+        Response response = client.newCall(request).execute();
+    }
+}
+
 // TODO: Добавление пары chatId : username в .xml
 // TODO: Проверка всех ящиков по файлу .xml
+
 
 /*
 //         Формирую константы:
@@ -107,17 +133,17 @@ public class Main {
                     System.out.println(multipart.getContentType());
                     BodyPart body = multipart.getBodyPart(0);
                     System.out.println(body.getContent()); */
-        /*
+/*
                 }
 
                 // Отправляю в чат множество уникальных заголовков:
+
                 for (String subject : subjects) { bot.execute(new SendMessage(CHAT_ID, subject.toString())); }
 
                 /* Общее количество сообщений:
                 System.out.println("Всего писем: " + inbox.getMessageCount());
                 System.out.println("Непрочитанных писем: " + inbox.getUnreadMessageCount()); */
-        /*
-
+/*
             } finally {
                 // Закрываю сессию работы с директорией:
                 inbox.close();
