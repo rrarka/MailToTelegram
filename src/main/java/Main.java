@@ -1,14 +1,22 @@
 import com.pengrad.telegrambot.TelegramBot;
 import com.pengrad.telegrambot.UpdatesListener;
 import com.pengrad.telegrambot.request.SendMessage;
+import okhttp3.*;
 
-import javax.mail.*;
-import javax.mail.search.FlagTerm;
-import java.io.FileInputStream;
-import java.io.IOException;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
+import org.apache.poi.ss.usermodel.*;
+import java.io.*;
 import java.util.*;
 
-import okhttp3.*;
+import javax.mail.MessagingException;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Properties;
 
 public class Main {
     public static void main(String[] args) throws IOException, MessagingException, InterruptedException {
@@ -56,6 +64,78 @@ public class Main {
             // Возвращаю статус, что все обновления были прочитанны ботом:
             return UpdatesListener.CONFIRMED_UPDATES_ALL;
         });
+
+
+        // ЧТЕНИЕ: -------------------------- TODO: Сделай закрытие файла в finally
+        try{
+            FileInputStream file = new FileInputStream(new File("/Volumes/DB RRA/2_dev/Java/MailToTelegram/src/main/resources/base.xlsx"));
+            // Инициализирую объект для работы с новой версией excel и задаю параметр:
+            XSSFWorkbook workbookNew = new XSSFWorkbook(file); // Это я сделал объект для доступа к файлу
+            // То же самое делаю для листа с индексом 0:
+            XSSFSheet sheetNew = workbookNew.getSheetAt(0); // Указал с какого листа буду получать данные
+            // Получаю количество строк:
+            System.out.println(sheetNew.getLastRowNum());
+            // Пройдусь по всем строкам с помощью итератора:
+            Iterator<Row> rowIterator = sheetNew.iterator(); // Row - это интерфейс библиотеки usermodel
+            // Чтобы пройтись по всем строкам нашего файла воспользуемся циклом while:
+            while (rowIterator.hasNext()) { // Пока есть данные в нашем файле:
+                Row row = rowIterator.next(); // Создаю объект интерфейса row и присваиваю позицию первой строке нашего файла
+                // Чтобы перебирать содержимое ячеек файла тоже воспользуемся итератором,и но уже для ячеек:
+                Iterator<Cell> cellIterator = row.cellIterator();
+                // Реализую цикл в котором буду перебирать ячейки построчно:
+                while (cellIterator.hasNext()) { // До тех пор пока есть заполненные ячейки
+                    Cell cell = cellIterator.next(); // Создаю объект интерфейса Cell и присваиваю ему данные из ячейки
+                    // С помощью оператора switch буду определять какие типы данных считываю из ячейки:
+                    switch (cell.getCellType()) { // Получаю тип данных в ячейке
+                        case NUMERIC: // Если числовой
+                            System.out.println(cell.getNumericCellValue()); // Вывожу это значение
+                            break;
+                        case STRING: // Если тип текстовый
+                            System.out.print(cell.getStringCellValue() + "\t\t"); // Вывожу текстовое значние + два tab
+                            break;
+                    }
+                }
+                System.out.println(); // перехожу на новую строку:
+            }
+            file.close(); // Закрываю файл
+        } catch (Exception e) {
+            System.out.println("Что - то пошло не так");
+        }
+/*
+        // ЗАПИСЬ: --------------------------- TODO: Сделай закрытие файла в finally
+        // Создаю книгу:
+        Workbook workbook = new XSSFWorkbook();
+        // Создаю лист
+        Sheet newSheet = workbook.createSheet("base");
+        // Создаю строку с указанием её номера:
+        Row row = newSheet.createRow(0);
+        // Создаю 0ю ячейку и записываю в неё данные:
+        row.createCell(0).setCellValue("Username");
+        // Создаю 1ю ячейку и записываю в неё данные:
+        row.createCell(1).setCellValue("Password");
+//
+        // Создаю строку с указанием её номера:
+        Row row1 = newSheet.createRow(1);
+        // Создаю 0ю ячейку и записываю в неё данные:
+        row1.createCell(0).setCellValue("User2");
+        // Создаю 1ю ячейку и записываю в неё данные:
+        row1.createCell(1).setCellValue("Pass2");
+
+        // Сохраню записанные данные в файл:
+        try{
+            // Инициализирую объект в который буду записывать данные:
+            FileOutputStream fileOut = new FileOutputStream("/Volumes/DB RRA/2_dev/Java/MailToTelegram/src/main/resources/base.xlsx");
+            // Передам в нашу excel - книгу как параметр объект этого файла:
+            workbook.write(fileOut);
+            // Закрываю файл:
+            fileOut.close();
+            System.out.println("Файл создан");
+        }
+        catch (Exception e) {
+            System.out.println("Что - то пошло не так(");
+        }
+*/
+
     }
 }
 
@@ -72,11 +152,25 @@ class Postman {
                 .build();
         Response response = client.newCall(request).execute();
     }
+
+    // Статический метод проверки почты в для пары
+}
+
+class ReaderWriter {
+    // Статический метод записи пары
+    // Статический метод чтения пары
+    // Статический метод подсчёта количества пар в базе
 }
 
 // TODO: Добавление пары chatId : username в .xml
+//      + метод получения количества строк на листе
+//      + метод чтения пары из листа
+//      + метод записи новой пары в конец листа (если такой пары не сущуествует)
+//
 // TODO: Проверка всех ящиков по файлу .xml
+//      + метод проверки обновлений в новом ящике
 
+// TODO: Если пара не срабатывает, помещаем её false и не работаем с ней
 
 /*
 //         Формирую константы:
