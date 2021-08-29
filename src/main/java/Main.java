@@ -13,7 +13,6 @@ import javax.mail.MessagingException;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -30,6 +29,10 @@ public class Main {
         final String TOKEN = properties.getProperty("telegram.token");
 
         final String ADDING_ADDRESS_API = properties.getProperty("mail.api.add");
+
+        final String PASSWORD = properties.getProperty("mail.password");
+
+        final String FILE_BD = properties.getProperty("file");;
 
         // Передаю боту токен:
         TelegramBot bot = new TelegramBot(TOKEN);
@@ -52,90 +55,19 @@ public class Main {
                         if (text.startsWith("/createMail")) {  // TODO: добавь проверку для исключения некошерных символов + проверку на команду без username
                             String[] words = text.split(" ");
                             String username = words[1].toLowerCase(); // Обязательно перевожу в нижний регистр
+//                                Postman.AddingNewAddress(username, ADDING_ADDRESS_API); // Создаю новый аккаунт
                             try {
-                                Postman.AddingNewAddress(username, ADDING_ADDRESS_API); // Создаю новый аккаунт
-                                bot.execute(new SendMessage(update.message().chat().id(), "СОЗДАЛ ПОЧТУ С АДРЕСОМ: " + username + "@email2tg.ru"));
+                                ReaderWriter.WriteAddressToBD(username, PASSWORD, FILE_BD); // Записываю новый адрес в БД
                             } catch (IOException e) {
                                 e.printStackTrace();
                             }
+                            bot.execute(new SendMessage(update.message().chat().id(), "СОЗДАЛ ПОЧТУ С АДРЕСОМ: " + username + "@email2tg.ru"));
                         }
                 }
             });
             // Возвращаю статус, что все обновления были прочитанны ботом:
             return UpdatesListener.CONFIRMED_UPDATES_ALL;
         });
-
-
-        // ЧТЕНИЕ: -------------------------- TODO: Сделай закрытие файла в finally
-        try{
-            FileInputStream file = new FileInputStream(new File("/Volumes/DB RRA/2_dev/Java/MailToTelegram/src/main/resources/base.xlsx"));
-            // Инициализирую объект для работы с новой версией excel и задаю параметр:
-            XSSFWorkbook workbookNew = new XSSFWorkbook(file); // Это я сделал объект для доступа к файлу
-            // То же самое делаю для листа с индексом 0:
-            XSSFSheet sheetNew = workbookNew.getSheetAt(0); // Указал с какого листа буду получать данные
-            // Получаю количество строк:
-            System.out.println(sheetNew.getLastRowNum());
-            // Пройдусь по всем строкам с помощью итератора:
-            Iterator<Row> rowIterator = sheetNew.iterator(); // Row - это интерфейс библиотеки usermodel
-            // Чтобы пройтись по всем строкам нашего файла воспользуемся циклом while:
-            while (rowIterator.hasNext()) { // Пока есть данные в нашем файле:
-                Row row = rowIterator.next(); // Создаю объект интерфейса row и присваиваю позицию первой строке нашего файла
-                // Чтобы перебирать содержимое ячеек файла тоже воспользуемся итератором,и но уже для ячеек:
-                Iterator<Cell> cellIterator = row.cellIterator();
-                // Реализую цикл в котором буду перебирать ячейки построчно:
-                while (cellIterator.hasNext()) { // До тех пор пока есть заполненные ячейки
-                    Cell cell = cellIterator.next(); // Создаю объект интерфейса Cell и присваиваю ему данные из ячейки
-                    // С помощью оператора switch буду определять какие типы данных считываю из ячейки:
-                    switch (cell.getCellType()) { // Получаю тип данных в ячейке
-                        case NUMERIC: // Если числовой
-                            System.out.println(cell.getNumericCellValue()); // Вывожу это значение
-                            break;
-                        case STRING: // Если тип текстовый
-                            System.out.print(cell.getStringCellValue() + "\t\t"); // Вывожу текстовое значние + два tab
-                            break;
-                    }
-                }
-                System.out.println(); // перехожу на новую строку:
-            }
-            file.close(); // Закрываю файл
-        } catch (Exception e) {
-            System.out.println("Что - то пошло не так");
-        }
-/*
-        // ЗАПИСЬ: --------------------------- TODO: Сделай закрытие файла в finally
-        // Создаю книгу:
-        Workbook workbook = new XSSFWorkbook();
-        // Создаю лист
-        Sheet newSheet = workbook.createSheet("base");
-        // Создаю строку с указанием её номера:
-        Row row = newSheet.createRow(0);
-        // Создаю 0ю ячейку и записываю в неё данные:
-        row.createCell(0).setCellValue("Username");
-        // Создаю 1ю ячейку и записываю в неё данные:
-        row.createCell(1).setCellValue("Password");
-//
-        // Создаю строку с указанием её номера:
-        Row row1 = newSheet.createRow(1);
-        // Создаю 0ю ячейку и записываю в неё данные:
-        row1.createCell(0).setCellValue("User2");
-        // Создаю 1ю ячейку и записываю в неё данные:
-        row1.createCell(1).setCellValue("Pass2");
-
-        // Сохраню записанные данные в файл:
-        try{
-            // Инициализирую объект в который буду записывать данные:
-            FileOutputStream fileOut = new FileOutputStream("/Volumes/DB RRA/2_dev/Java/MailToTelegram/src/main/resources/base.xlsx");
-            // Передам в нашу excel - книгу как параметр объект этого файла:
-            workbook.write(fileOut);
-            // Закрываю файл:
-            fileOut.close();
-            System.out.println("Файл создан");
-        }
-        catch (Exception e) {
-            System.out.println("Что - то пошло не так(");
-        }
-*/
-
     }
 }
 
@@ -152,20 +84,101 @@ class Postman {
                 .build();
         Response response = client.newCall(request).execute();
     }
-
     // Статический метод проверки почты в для пары
 }
 
 class ReaderWriter {
-    // Статический метод записи пары
+    // Статический метод записи адреса в БД:
+    public static void WriteAddressToBD(String username, String password, String filename) throws IOException {
+        // TODO: Сделай закрытие файла в finally
+        try {
+            // Создаю входящий поток данных, указываю файл с которым буду работать:
+            FileInputStream fileInput = new FileInputStream(filename);
+
+            // Создаю объект для доступа к файлу и нициализирую объект для работы с новой версией excel + задаю параметр:
+            XSSFWorkbook workbook = new XSSFWorkbook(fileInput);
+
+            // Создаю объект для доступа к листу. В параметрах указываю с какого листа получать данные:
+            XSSFSheet sheet = workbook.getSheetAt(0);
+
+            // Создаю новую строку. Номер новой строки получаю с помощью метода "getLastRowNum() + 1"):
+            Row row = sheet.createRow(sheet.getLastRowNum() + 1);
+
+            // Устанавливаю значение для содержимоего 0й и 1й ячеек:
+            row.createCell(0).setCellValue(username);
+            row.createCell(1).setCellValue(password);
+
+            // Сохраню записанные данные в файл:
+            try {
+                // Инициализирую объект в который буду записывать данные:
+                FileOutputStream fileOut = new FileOutputStream(filename);
+
+                // Передам в нашу excel - книгу как параметр объект этого файла:
+                workbook.write(fileOut);
+
+                // Закрываю файл:
+                fileOut.close();
+            } catch (Exception e) {
+                System.out.println("Что - то пошло не так при записи");
+            }
+        } catch (Exception e) {
+            System.out.println("Что - то пошло не так при чтении");
+        }
+    }
+
+
     // Статический метод чтения пары
-    // Статический метод подсчёта количества пар в базе
+    public static void ReadBD(String fileName) {
+        // TODO: Сделай закрытие файла в finally
+        try {
+            // Создаю входящий поток данных, указываю файл с которым буду работать:
+            FileInputStream file = new FileInputStream(new File(fileName));
+
+            // Инициализирую объект для работы с новой версией excel и задаю параметр:
+            XSSFWorkbook workbookNew = new XSSFWorkbook(file); // Сделал объект для доступа к файлу
+
+            // То же самое делаю для листа с индексом 0:
+            XSSFSheet sheetNew = workbookNew.getSheetAt(0); // Указал с какого листа буду получать данные
+
+            // Пройдусь по всем строкам с помощью итератора:
+            Iterator<Row> rowIterator = sheetNew.iterator(); // Row - это интерфейс библиотеки usermodel
+
+            // Чтобы пройтись по всем строкам нашего файла воспользуемся циклом while:
+            while (rowIterator.hasNext()) { // Пока есть данные в нашем файле:
+                Row row = rowIterator.next(); // Создаю объект интерфейса row и присваиваю позицию первой строке нашего файла
+
+                // Чтобы перебирать содержимое ячеек файла тоже воспользуемся итератором,и но уже для ячеек:
+                Iterator<Cell> cellIterator = row.cellIterator();
+
+                // Реализую цикл в котором буду перебирать ячейки построчно:
+                while (cellIterator.hasNext()) { // До тех пор пока есть заполненные ячейки
+                    Cell cell = cellIterator.next(); // Создаю объект интерфейса Cell и присваиваю ему данные из ячейки
+
+                    // С помощью оператора switch буду определять какие типы данных считываю из ячейки:
+                    switch (cell.getCellType()) { // Получаю тип данных в ячейке
+                        case NUMERIC: // Если числовой
+                            System.out.println(cell.getNumericCellValue()); // Вывожу это значение
+                            break;
+                        case STRING: // Если тип текстовый
+                            System.out.print(cell.getStringCellValue() + "\t\t"); // Вывожу текстовое значние + два tab
+                            break;
+                    }
+                }
+                System.out.println(); // перехожу на новую строку:
+            }
+            file.close(); // Закрываю файл
+        } catch (Exception e) {
+            System.out.println("Что - то пошло не так");
+        }
+    }
+
+        // Статический метод подсчёта количества пар в базе
 }
 
+
 // TODO: Добавление пары chatId : username в .xml
-//      + метод получения количества строк на листе
 //      + метод чтения пары из листа
-//      + метод записи новой пары в конец листа (если такой пары не сущуествует)
+//      + добавить в метод записи новой пары в конец листа проверку на существование добавляемой пары (используя отдельно реализованный метод чтения БД)
 //
 // TODO: Проверка всех ящиков по файлу .xml
 //      + метод проверки обновлений в новом ящике
