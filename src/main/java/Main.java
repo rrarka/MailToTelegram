@@ -1,6 +1,7 @@
 import com.pengrad.telegrambot.TelegramBot;
 import com.pengrad.telegrambot.UpdatesListener;
 import com.pengrad.telegrambot.request.SendMessage;
+import com.sun.scenario.effect.impl.sw.sse.SSEBlend_SRC_OUTPeer;
 import okhttp3.*;
 
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -25,13 +26,10 @@ public class Main {
         Properties properties = new Properties();
         properties.load(fileInputStream);
 
-        // Формирую константу:
+        // Формирую константы:
         final String TOKEN = properties.getProperty("telegram.token");
-
         final String ADDING_ADDRESS_API = properties.getProperty("mail.api.add");
-
         final String PASSWORD = properties.getProperty("mail.password");
-
         final String FILE_BD = properties.getProperty("file");;
 
         // Передаю боту токен:
@@ -42,28 +40,43 @@ public class Main {
 
         // Получаю все обновления приходящие в бот
         bot.setUpdatesListener(updates -> {
-//            updates.forEach(System.out::println); // Вывожу полученный список данных которые пришли в бота с сообщением
+
+            // Вывожу полученный список данных которые пришли в бота с сообщением
+//            updates.forEach(System.out::println);
+
             // Для каждого из обновлений:
             updates.forEach(update -> {
-                // Если в обновлении содержится сообщение:
-                if (update.message() != null){
-                    String text = update.message().text();
 
-                    // И это сообщение не пустое:
-                    if (text != null)
-                        // И если сообщение является командой:
-                        if (text.startsWith("/createMail")) {  // TODO: добавь проверку для исключения некошерных символов + проверку на команду без username
-                            String[] words = text.split(" ");
-                            String username = words[1].toLowerCase(); // Обязательно перевожу в нижний регистр
-//                                Postman.AddingNewAddress(username, ADDING_ADDRESS_API); // Создаю новый аккаунт
-                            try {
-                                ReaderWriter.WriteAddressToBD(username, PASSWORD, FILE_BD); // Записываю новый адрес в БД
-                            } catch (IOException e) {
-                                e.printStackTrace();
-                            }
-                            bot.execute(new SendMessage(update.message().chat().id(), "СОЗДАЛ ПОЧТУ С АДРЕСОМ: " + username + "@email2tg.ru"));
+                        // Если в обновлении содержится сообщение:
+                        if (update.message() != null) {
+                            String text = update.message().text();
+
+                            // И это сообщение не пустое:
+                            if (text != null)
+
+                                // И если сообщение является командой:
+                                if (text.startsWith("/createMail")) {  // TODO: добавь проверку для исключения некошерных символов + проверку на команду без username
+                                    String[] words = text.split(" ");
+                                    String username = words[1].toLowerCase(); // Обязательно перевожу в нижний регистр
+                                    try {
+
+                                        // Если такого адреса нет в БД:
+                                        if (!ReaderWriter.isExistenceUsername(username, FILE_BD)) {
+
+                                            // Создаю новый аккаунт:
+//                                          Postman.AddingNewAddress(username, ADDING_ADDRESS_API);
+
+                                            // Записываю новый адрес в БД:
+                                            ReaderWriter.WriteAddressToBD(username, PASSWORD, FILE_BD);
+                                            bot.execute(new SendMessage(update.message().chat().id(), "Создал аккаунт с адресом " + username + "@email2tg.ru"));
+                                        } else {
+                                            bot.execute(new SendMessage(update.message().chat().id(), "Такой адрес уже кем - то занят. Выберите другой."));
+                                        }
+                                    } catch (IOException e) {
+                                        e.printStackTrace();
+                                    }
+                                }
                         }
-                }
             });
             // Возвращаю статус, что все обновления были прочитанны ботом:
             return UpdatesListener.CONFIRMED_UPDATES_ALL;
@@ -126,65 +139,45 @@ class ReaderWriter {
         }
     }
 
-
-    // Статический метод чтения пары
-    public static void ReadBD(String fileName) {
+    // Статический метод проверки наличия логина в БД:
+    public static boolean isExistenceUsername(String username, String filename) throws IOException {
         // TODO: Сделай закрытие файла в finally
-        try {
-            // Создаю входящий поток данных, указываю файл с которым буду работать:
-            FileInputStream file = new FileInputStream(new File(fileName));
 
-            // Инициализирую объект для работы с новой версией excel и задаю параметр:
-            XSSFWorkbook workbookNew = new XSSFWorkbook(file); // Сделал объект для доступа к файлу
+        // Создаю входящий поток данных, указываю файл с которым буду работать:
+        FileInputStream file = new FileInputStream(filename);
 
-            // То же самое делаю для листа с индексом 0:
-            XSSFSheet sheetNew = workbookNew.getSheetAt(0); // Указал с какого листа буду получать данные
+        // Создаю объект для доступа к файлу и нициализирую объект для работы с новой версией excel + задаю параметр:
+        XSSFWorkbook workbook = new XSSFWorkbook(file);
 
-            // Пройдусь по всем строкам с помощью итератора:
-            Iterator<Row> rowIterator = sheetNew.iterator(); // Row - это интерфейс библиотеки usermodel
+        // Создаю объект для доступа к листу. В параметрах указываю с какого листа получать данные:
+        XSSFSheet sheet = workbook.getSheetAt(0);
 
-            // Чтобы пройтись по всем строкам нашего файла воспользуемся циклом while:
-            while (rowIterator.hasNext()) { // Пока есть данные в нашем файле:
-                Row row = rowIterator.next(); // Создаю объект интерфейса row и присваиваю позицию первой строке нашего файла
+        // Для всех строк листа:
+        for (Row row : sheet) {
+            // Считываю значение 0й ячейки:
+            Cell cell = row.getCell(0);
 
-                // Чтобы перебирать содержимое ячеек файла тоже воспользуемся итератором,и но уже для ячеек:
-                Iterator<Cell> cellIterator = row.cellIterator();
+            // Получаю из значения строку:
+            String value = cell.getStringCellValue();
 
-                // Реализую цикл в котором буду перебирать ячейки построчно:
-                while (cellIterator.hasNext()) { // До тех пор пока есть заполненные ячейки
-                    Cell cell = cellIterator.next(); // Создаю объект интерфейса Cell и присваиваю ему данные из ячейки
-
-                    // С помощью оператора switch буду определять какие типы данных считываю из ячейки:
-                    switch (cell.getCellType()) { // Получаю тип данных в ячейке
-                        case NUMERIC: // Если числовой
-                            System.out.println(cell.getNumericCellValue()); // Вывожу это значение
-                            break;
-                        case STRING: // Если тип текстовый
-                            System.out.print(cell.getStringCellValue() + "\t\t"); // Вывожу текстовое значние + два tab
-                            break;
-                    }
-                }
-                System.out.println(); // перехожу на новую строку:
+            // Если значение строки совпадает с создаваемым логином:
+            if (username.equals(value)) {
+                file.close();
+                return true;
             }
-            file.close(); // Закрываю файл
-        } catch (Exception e) {
-            System.out.println("Что - то пошло не так");
         }
+        file.close();
+        return false;
     }
-
-        // Статический метод подсчёта количества пар в базе
 }
-
 
 // TODO: Добавление пары chatId : username в .xml
 //      + метод чтения пары из листа
-//      + добавить в метод записи новой пары в конец листа проверку на существование добавляемой пары (используя отдельно реализованный метод чтения БД)
 //
 // TODO: Проверка всех ящиков по файлу .xml
 //      + метод проверки обновлений в новом ящике
-
-// TODO: Если пара не срабатывает, помещаем её false и не работаем с ней
-
+//
+// TODO: Если пара не срабатывает, помещаем её false и не работаем с ней (метод проверки отработки и заполнения true/false должен быть отдельным)
 /*
 //         Формирую константы:
         final String USER = properties.getProperty("mail.user");
