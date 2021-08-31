@@ -10,7 +10,8 @@ import org.apache.poi.ss.usermodel.*;
 import java.io.*;
 import java.util.*;
 
-import javax.mail.MessagingException;
+import javax.mail.*;
+import javax.mail.search.FlagTerm;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -30,13 +31,11 @@ public class Main {
         final String TOKEN = properties.getProperty("telegram.token");
         final String ADDING_ADDRESS_API = properties.getProperty("mail.api.add");
         final String PASSWORD = properties.getProperty("mail.password");
+        final String DOMAINE = properties.getProperty("mail.domaine");
         final String FILE_BD = properties.getProperty("file");;
 
         // Передаю боту токен:
         TelegramBot bot = new TelegramBot(TOKEN);
-
-        // Мап хранит базу чатов и создан ли для этого чата почтовый ящик (true/false):
-        Map<Long, Boolean> chats = new HashMap<>();
 
         // Получаю все обновления приходящие в бот
         bot.setUpdatesListener(updates -> {
@@ -59,7 +58,6 @@ public class Main {
                                     String[] words = text.split(" ");
                                     String username = words[1].toLowerCase(); // Обязательно перевожу в нижний регистр
                                     try {
-
                                         // Если такого адреса нет в БД:
                                         if (!ReaderWriter.isExistenceUsername(username, FILE_BD)) {
 
@@ -68,9 +66,9 @@ public class Main {
 
                                             // Записываю новый адрес в БД:
                                             ReaderWriter.WriteAddressToBD(username, PASSWORD, FILE_BD);
-                                            bot.execute(new SendMessage(update.message().chat().id(), "Создал аккаунт с адресом " + username + "@email2tg.ru"));
+                                            bot.execute(new SendMessage(update.message().chat().id(), "Создал аккаунт с адресом " + username + DOMAINE));
                                         } else {
-                                            bot.execute(new SendMessage(update.message().chat().id(), "Такой адрес уже кем - то занят. Выберите другой."));
+                                            bot.execute(new SendMessage(update.message().chat().id(), "Этот адрес занят. Выберите другой."));
                                         }
                                     } catch (IOException e) {
                                         e.printStackTrace();
@@ -81,6 +79,13 @@ public class Main {
             // Возвращаю статус, что все обновления были прочитанны ботом:
             return UpdatesListener.CONFIRMED_UPDATES_ALL;
         });
+
+        // Временно повешаю тут переменные TODO: убери их
+        final String USER = properties.getProperty("mail.user");
+        final String HOST = properties.getProperty("mail.host");
+
+        Set<String> subjects = Postman.checkMail(USER, PASSWORD, HOST);
+        for (String subject : subjects) { System.out.println(subject.toString()); }
     }
 }
 
@@ -97,7 +102,73 @@ class Postman {
                 .build();
         Response response = client.newCall(request).execute();
     }
-    // Статический метод проверки почты в для пары
+
+    // Статический метод проверки почты в для пары TODO: Проверь его работу
+    public static Set<String> checkMail(String username, String password, String getHost) throws MessagingException {
+        String user = username;
+        String pass = password;
+        String host = getHost;
+
+        // Инициализирую специальный объект Properties типа Hashtable для удобной работы с данными:
+        Properties prop = new Properties();
+        // Передаю параметры работы протокола SSL с сервером
+        prop.put("mail.store.protocol", "imaps");
+//        prop.put("mail.store.protocol", "imap");
+//        prop.put("mail.imap.starttls.enable", "true");
+
+        // Создаю хранилище сообщений:
+        Store store = Session.getInstance(prop).getStore();
+        store.connect(host, user, pass);
+//        store.connect(HOST, 143, USER, PASSWORD);
+
+        // Создаю множество для заголовков писем:
+        Set<String> subjects = new HashSet<String>();
+
+        // Формирую флаг непрочитанных писем:
+        FlagTerm unread = new FlagTerm(new Flags(Flags.Flag.SEEN), false);
+
+        // Создаю массив для непрочитанных писем:
+        Message[] unreadMessages;
+
+        // Создаю пустую директорию под письма:
+        Folder inbox = null;
+
+        try {
+            // Позиционируюсь на корневой диркториии "Входящие" и выгружаю письма с возможностью изменения:
+            inbox = store.getFolder("INBOX");
+            inbox.open(Folder.READ_WRITE); // or Folder.READ_ONLY
+
+            // Заполняю массив непрочитанными письмами:
+            unreadMessages = inbox.search(unread);
+
+            // Для массива непрочитанных писем:
+            for (Message message : unreadMessages) {
+                // Заполняю множество уникальными заголовками (отсекаю повторения из вложенных писем):
+                subjects.add(message.getSubject());
+
+                // Помечаю письмо прочитанным:
+                message.setFlag(Flags.Flag.SEEN, true);
+
+                /* Тело письма:
+                Multipart multipart = (Multipart) message.getContent();
+                System.out.println(multipart.getContentType());
+                BodyPart body = multipart.getBodyPart(0);
+                System.out.println(body.getContent()); */
+            }
+            // Отправляю в чат множество уникальных заголовков:
+            //for (String subject : subjects) { bot.execute(new SendMessage(CHAT_ID, subject.toString())); }
+
+        } finally {
+            // Закрываю сессию работы с директорией:
+            inbox.close();
+
+            // Жду 20 секунд:
+//              Thread.sleep(20000);
+            // Очищаю множество непрочитанных писем:
+//                subjects.clear();
+        }
+        return subjects;
+    }
 }
 
 class ReaderWriter {
@@ -173,11 +244,12 @@ class ReaderWriter {
 
 // TODO: Добавление пары chatId : username в .xml
 //      + метод чтения пары из листа
-//
+
 // TODO: Проверка всех ящиков по файлу .xml
 //      + метод проверки обновлений в новом ящике
-//
+
 // TODO: Если пара не срабатывает, помещаем её false и не работаем с ней (метод проверки отработки и заполнения true/false должен быть отдельным)
+
 /*
 //         Формирую константы:
         final String USER = properties.getProperty("mail.user");
@@ -237,7 +309,6 @@ class ReaderWriter {
                 }
 
                 // Отправляю в чат множество уникальных заголовков:
-
                 for (String subject : subjects) { bot.execute(new SendMessage(CHAT_ID, subject.toString())); }
 
                 /* Общее количество сообщений:
